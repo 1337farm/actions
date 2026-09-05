@@ -1,0 +1,39 @@
+name: Publish rolling release
+description: Replace (delete + recreate) a rolling GitHub release tag with the given files. Caller builds assets + manifests; this handles the release mechanics.
+inputs:
+  tag:
+    description: Rolling tag to replace (e.g. engine-latest)
+    required: true
+  title:
+    description: Release title
+    required: true
+  notes:
+    description: Release notes body
+    required: false
+    default: ""
+  files:
+    description: Space-separated asset paths to upload
+    required: true
+  repo:
+    description: owner/repo to publish into (defaults to caller repo)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Publish rolling release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_TITLE: ${{ inputs.title }}
+        INPUT_NOTES: ${{ inputs.notes }}
+        INPUT_FILES: ${{ inputs.files }}
+        INPUT_REPO: ${{ inputs.repo }}
+      run: |
+        REPO_ARGS=""
+        [ -n "$INPUT_REPO" ] && REPO_ARGS="--repo $INPUT_REPO"
+        # shellcheck disable=SC2086
+        gh release delete "$INPUT_TAG" --yes --cleanup-tag $REPO_ARGS 2>/dev/null || true
+        # shellcheck disable=SC2086
+        gh release create "$INPUT_TAG" $INPUT_FILES --title "$INPUT_TITLE" --notes "$INPUT_NOTES" $REPO_ARGS

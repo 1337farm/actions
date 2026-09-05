@@ -1,0 +1,22 @@
+name: Setup JDK
+description: Install Eclipse Temurin JDK from Adoptium API and export JAVA_HOME. No package managers, no external actions.
+inputs:
+  java-version:
+    description: Major JDK version to install
+    required: false
+    default: "17"
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK
+      shell: bash
+      env:
+        JAVA_VERSION: ${{ inputs.java-version }}
+      run: |
+        curl -fsSL -o /tmp/temurin.tar.gz "https://api.adoptium.net/v3/binary/latest/${JAVA_VERSION}/ga/linux/x64/jdk/hotspot/normal/eclipse"
+        rm -rf /tmp/jdk && mkdir -p /tmp/jdk
+        tar -xzf /tmp/temurin.tar.gz -C /tmp/jdk --strip-components=1
+        rm -f /tmp/temurin.tar.gz
+        /tmp/jdk/bin/java -version 2>&1 | head -1
+        echo "JAVA_HOME=/tmp/jdk" >> "$GITHUB_ENV"
+        echo "/tmp/jdk/bin" >> "$GITHUB_PATH"

@@ -1,0 +1,24 @@
+name: Squash-merge PR
+description: Directly squash-merge a same-repo PR (and delete its branch). Intended as the last step of a green build, replacing fragile auto-merge enablement.
+inputs:
+  pr-number:
+    description: Pull request number to merge
+    required: true
+  repo:
+    description: owner/repo hosting the PR (defaults to caller repo)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Squash-merge PR
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        INPUT_PR: ${{ inputs.pr-number }}
+        INPUT_REPO: ${{ inputs.repo }}
+      run: |
+        REPO_ARGS=""
+        [ -n "$INPUT_REPO" ] && REPO_ARGS="--repo $INPUT_REPO"
+        # shellcheck disable=SC2086
+        gh pr merge "$INPUT_PR" $REPO_ARGS --squash --delete-branch
