@@ -1,5 +1,9 @@
 name: Setup JDK
-description: Install Eclipse Temurin JDK from Adoptium API and export JAVA_HOME. No package managers, no external actions.
+description: >-
+  Install Eclipse Temurin JDK from Adoptium API and export JAVA_HOME. Supports
+  linux/macOS on x64 and aarch64. Reuses a cached JDK from the runner tool cache
+  when available so it does not re-download on every run. No package managers,
+  no external actions.
 inputs:
   java-version:
     description: Major JDK version to install
@@ -12,11 +16,56 @@ runs:
       shell: bash
       env:
         JAVA_VERSION: ${{ inputs.java-version }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+        RUNNER_TOOL_CACHE: ${{ runner.tool_cache }}
       run: |
-        curl -fsSL -o /tmp/temurin.tar.gz "https://api.adoptium.net/v3/binary/latest/${JAVA_VERSION}/ga/linux/x64/jdk/hotspot/normal/eclipse"
-        rm -rf /tmp/jdk && mkdir -p /tmp/jdk
-        tar -xzf /tmp/temurin.tar.gz -C /tmp/jdk --strip-components=1
-        rm -f /tmp/temurin.tar.gz
-        /tmp/jdk/bin/java -version 2>&1 | head -1
-        echo "JAVA_HOME=/tmp/jdk" >> "$GITHUB_ENV"
-        echo "/tmp/jdk/bin" >> "$GITHUB_PATH"
+        set -euo pipefail
+
+        case "$RUNNER_OS" in
+          Linux)  OS="linux" ;;
+          macOS)  OS="mac" ;;
+          *)      echo "ERROR: unsupported runner OS '$RUNNER_OS' (must be Linux or macOS)" >&2; exit 1 ;;
+        esac
+
+        case "$RUNNER_ARCH" in
+          X64)    ARCH="x64" ;;
+          ARM64)  ARCH="aarch64" ;;
+          *)      echo "ERROR: unsupported runner arch '$RUNNER_ARCH' (must be X64 or ARM64)" >&2; exit 1 ;;
+        esac
+
+        # 1) Reuse a Temurin already present in the hosted tool cache
+        #    (preinstalled JDKs on GitHub images / prior setup-java steps).
+        for cand in "$RUNNER_TOOL_CACHE"/Java_Temurin-Hotspot_jdk/${JAVA_VERSION}.*/*/bin/java; do
+          if [ -x "$cand" ]; then
+            JDK="$(dirname "$(dirname "$cand")")"
+            break
+          fi
+        done
+        if [ -z "${JDK:-}" ]; then
+          # 2) Reuse our own cached install keyed by version+os+arch.
+          CACHE_DIR="$RUNNER_TOOL_CACHE/temurin/${JAVA_VERSION}-${OS}-${ARCH}"
+          if [ -x "$CACHE_DIR/bin/java" ] && [ "$(cat "$CACHE_DIR/.version" 2>/dev/null || true)" = "$JAVA_VERSION" ]; then
+            JDK="$CACHE_DIR"
+          fi
+        fi
+
+        # 3) Download from Adoptium if nothing usable was found.
+        if [ -z "${JDK:-}" ]; then
+          curl -fsSL -o /tmp/temurin.tar.gz \
+            "https://api.adoptium.net/v3/binary/latest/${JAVA_VERSION}/ga/${OS}/${ARCH}/jdk/hotspot/normal/eclipse"
+          mkdir -p "$RUNNER_TOOL_CACHE/temurin"
+          JDK="$RUNNER_TOOL_CACHE/temurin/${JAVA_VERSION}-${OS}-${ARCH}"
+          rm -rf "$JDK"
+          mkdir -p "$JDK"
+          tar -xzf /tmp/temurin.tar.gz -C "$JDK" --strip-components=1
+          rm -f /tmp/temurin.tar.gz
+          echo "$JAVA_VERSION" > "$JDK/.version"
+          echo "Cached JDK $JAVA_VERSION installed at $JDK"
+        else
+          echo "Reusing cached JDK at $JDK"
+        fi
+
+        "$JDK/bin/java" -version 2>&1 | head -1
+        echo "JAVA_HOME=$JDK" >> "$GITHUB_ENV"
+        echo "$JDK/bin" >> "$GITHUB_PATH"

@@ -1,0 +1,55 @@
+name: Setup Android NDK
+description: >-
+  Install a specific Android NDK via sdkmanager and export NDK env vars. Wraps
+  the hand-written `sdkmanager "ndk;<ver>"` boilerplate so consumers stop
+  inlining it.
+inputs:
+  ndk-version:
+    description: NDK version to install (e.g. 23.1.7779620, 25.2.9519653)
+    required: false
+    default: "23.1.7779620"
+  sdk-path:
+    description: Path to the Android SDK (defaults to the runner-preinstalled SDK)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install NDK
+      shell: bash
+      env:
+        NDK_VERSION: ${{ inputs.ndk-version }}
+        SDK_INPUT: ${{ inputs.sdk-path }}
+      run: |
+        set -euo pipefail
+
+        # Resolve the SDK the same way setup-android-env does (this action must
+        # stay self-contained; consumed actions can't reach sibling files).
+        SDK=""
+        if [ -n "$SDK_INPUT" ]; then
+          SDK="$SDK_INPUT"
+        elif [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -d "$ANDROID_SDK_ROOT" ]; then
+          SDK="$ANDROID_SDK_ROOT"
+        elif [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME" ]; then
+          SDK="$ANDROID_HOME"
+        elif [ -d /usr/local/lib/android/sdk ]; then
+          SDK=/usr/local/lib/android/sdk
+        fi
+        [ -n "$SDK" ] || { echo "ERROR: Android SDK not found (set sdk-path, ANDROID_SDK_ROOT, or ANDROID_HOME)" >&2; exit 1; }
+        [ -d "$SDK/cmdline-tools" ] || { echo "ERROR: SDK missing cmdline-tools at $SDK/cmdline-tools" >&2; exit 1; }
+        export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+
+        NDK_DIR="$SDK/ndk/$NDK_VERSION"
+        if [ ! -d "$NDK_DIR" ]; then
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "ndk;$NDK_VERSION"
+        else
+          echo "NDK $NDK_VERSION already present at $NDK_DIR"
+        fi
+
+        [ -d "$NDK_DIR" ] || { echo "ERROR: NDK $NDK_VERSION not installed at $NDK_DIR" >&2; exit 1; }
+
+        echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
+        echo "ANDROID_NDK_ROOT=$NDK_DIR" >> "$GITHUB_ENV"
+        echo "$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+        echo "Android NDK: $NDK_VERSION"

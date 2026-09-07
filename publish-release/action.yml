@@ -1,5 +1,9 @@
 name: Publish rolling release
-description: Replace (delete + recreate) a rolling GitHub release tag with the given files. Caller builds assets + manifests; this handles the release mechanics.
+description: >-
+  Replace (delete + recreate) a rolling GitHub release tag with the given files.
+  Caller builds assets + manifests; this handles the release mechanics. Files
+  may be space- or newline-separated and may contain glob patterns; missing
+  assets fail loudly.
 inputs:
   tag:
     description: Rolling tag to replace (e.g. engine-latest)
@@ -12,7 +16,9 @@ inputs:
     required: false
     default: ""
   files:
-    description: Space-separated asset paths to upload
+    description: >-
+      Space- or newline-separated asset paths to upload. Glob patterns are
+      supported; every pattern must match at least one existing file.
     required: true
   repo:
     description: owner/repo to publish into (defaults to caller repo)
@@ -21,6 +27,51 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Verify repo input
+      shell: bash
+      env:
+        INPUT_REPO: ${{ inputs.repo }}
+      run: |
+        set -euo pipefail
+        if [ -n "$INPUT_REPO" ] && ! printf '%s' "$INPUT_REPO" | grep -qE '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
+          echo "ERROR: repo input must be 'owner/repo', got '$INPUT_REPO'" >&2
+          exit 1
+        fi
+
+    - name: Resolve asset files
+      id: resolve
+      shell: bash
+      env:
+        INPUT_FILES: ${{ inputs.files }}
+      run: |
+        set -euo pipefail
+        # Accept both space- and newline-separated tokens.
+        mapfile -t TOKENS < <(printf '%s' "$INPUT_FILES" | tr ' ' '\n' | sed '/^$/d')
+        [ "${#TOKENS[@]}" -gt 0 ] || { echo "ERROR: files input is empty" >&2; exit 1; }
+
+        LIST_FILE="$(mktemp)"
+        RESOLVED=0
+        for t in "${TOKENS[@]}"; do
+          if printf '%s' "$t" | grep -qE '[*?[]'; then
+            # glob: expand relative to GITHUB_WORKSPACE
+            (cd "${GITHUB_WORKSPACE:-.}" && compgen -G "$t") > /dev/null 2>&1 || {
+              echo "ERROR: glob matched nothing: $t" >&2; exit 1
+            }
+            (cd "${GITHUB_WORKSPACE:-.}" && compgen -G "$t") | while IFS= read -r f; do printf '%s\n' "$f" >> "$LIST_FILE"; done
+          else
+            [ -e "$t" ] || { echo "ERROR: asset not found: $t" >&2; exit 1; }
+            printf '%s\n' "$t" >> "$LIST_FILE"
+          fi
+        done
+
+        RESOLVED="$(wc -l < "$LIST_FILE")"
+        [ "$RESOLVED" -gt 0 ] || { echo "ERROR: no assets resolved from: $INPUT_FILES" >&2; exit 1; }
+        echo "Resolved $RESOLVED asset(s):"
+        sed 's/^/  - /' "$LIST_FILE"
+
+        echo "count=$RESOLVED" >> "$GITHUB_OUTPUT"
+        echo "list=$LIST_FILE" >> "$GITHUB_OUTPUT"
+
     - name: Publish rolling release
       shell: bash
       env:
@@ -28,12 +79,26 @@ runs:
         INPUT_TAG: ${{ inputs.tag }}
         INPUT_TITLE: ${{ inputs.title }}
         INPUT_NOTES: ${{ inputs.notes }}
-        INPUT_FILES: ${{ inputs.files }}
         INPUT_REPO: ${{ inputs.repo }}
+        RESOLVED_COUNT: ${{ steps.resolve.outputs.count }}
+        RESOLVED_LIST: ${{ steps.resolve.outputs.list }}
       run: |
-        REPO_ARGS=""
-        [ -n "$INPUT_REPO" ] && REPO_ARGS="--repo $INPUT_REPO"
-        # shellcheck disable=SC2086
-        gh release delete "$INPUT_TAG" --yes --cleanup-tag $REPO_ARGS 2>/dev/null || true
-        # shellcheck disable=SC2086
-        gh release create "$INPUT_TAG" $INPUT_FILES --title "$INPUT_TITLE" --notes "$INPUT_NOTES" $REPO_ARGS
+        set -euo pipefail
+
+        REPO_ARGS=()
+        [ -n "$INPUT_REPO" ] && REPO_ARGS=(--repo "$INPUT_REPO")
+
+        # Delete only if the release actually exists; surface real failures.
+        if gh release view "$INPUT_TAG" "${REPO_ARGS[@]}" >/dev/null 2>&1; then
+          echo "Deleting existing release '$INPUT_TAG'"
+          gh release delete "$INPUT_TAG" --yes --cleanup-tag "${REPO_ARGS[@]}"
+        else
+          echo "No existing release '$INPUT_TAG'; creating fresh"
+        fi
+
+        mapfile -t FILES < "$RESOLVED_LIST"
+        echo "Publishing $RESOLVED_COUNT asset(s):"
+        printf '  - %s\n' "${FILES[@]}"
+
+        gh release create "$INPUT_TAG" "${FILES[@]}" \
+          --title "$INPUT_TITLE" --notes "$INPUT_NOTES" "${REPO_ARGS[@]}"
