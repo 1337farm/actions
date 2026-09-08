@@ -44,9 +44,16 @@ runs:
           exit 0
         fi
 
-        # Preflight: PR must exist and be mergeable.
+        # Preflight: PR must exist and be open.
         STATE="$(gh pr view "$INPUT_PR" "${REPO_ARGS[@]}" --json state --jq '.state')"
         [ "$STATE" = "OPEN" ] || { echo "ERROR: PR #$INPUT_PR is not open (state=$STATE)" >&2; exit 1; }
+
+        # Mergeability preflight.
+        MERGEABLE="$(gh pr view "$INPUT_PR" "${REPO_ARGS[@]}" --json mergeable --jq '.mergeable')"
+        if [ "$MERGEABLE" = "false" ]; then
+          echo "ERROR: PR #$INPUT_PR is not mergeable (conflicts or missing checks)" >&2
+          exit 1
+        fi
 
         MERGE_STATE="$(gh pr view "$INPUT_PR" "${REPO_ARGS[@]}" --json mergeStateStatus --jq '.mergeStateStatus')"
         case "$MERGE_STATE" in
@@ -62,7 +69,9 @@ runs:
             ;;
         esac
 
-        gh pr merge "$INPUT_PR" "${REPO_ARGS[@]}" --squash --delete-branch \
+        # Squash merge (delete branch attempted separately so a protected-branch
+        # failure is a warning, not a hard failure).
+        gh pr merge "$INPUT_PR" "${REPO_ARGS[@]}" --squash \
           || { echo "ERROR: squash merge of PR #$INPUT_PR failed" >&2; exit 1; }
 
         echo "Merged PR #$INPUT_PR"
