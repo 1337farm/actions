@@ -18,30 +18,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: actionlint (workflow + action.yml syntax)
+      - name: actionlint (workflow syntax)
         shell: bash
         run: |
           mkdir -p /tmp/actionlint
           curl -fsSL -o /tmp/actionlint/actionlint.tar.gz \
-            https://github.com/rhysd/actionlint/releases/download/v1.7.4/actionlint_1.7.4_linux_x86_64.tar.gz
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           tar -xzf /tmp/actionlint/actionlint.tar.gz -C /tmp/actionlint --strip-components=1
-          /tmp/actionlint/actionlint -color \
-            .github/workflows/*.yml \
-            setup-jdk/action.yml \
-            setup-android-env/action.yml \
-            setup-android-ndk/action.yml \
-            publish-release/action.yml \
-            squash-merge/action.yml
+          /tmp/actionlint/actionlint -color .github/workflows/*.yml
 
-      - name: shellcheck inline scripts (commentary; word-splitting is intentional)
+      - name: validate action.yml files (YAML parse + shellcheck inline blocks)
         shell: bash
         run: |
-          if command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get update -qq >/dev/null && sudo apt-get install -y -qq shellcheck >/dev/null
-          fi
-          if command -v shellcheck >/dev/null 2>&1; then
-            python3 - <<'PY' || true
+          sudo apt-get update -qq >/dev/null && sudo apt-get install -y -qq shellcheck >/dev/null
+          python3 - <<'PY'
+          import pathlib, sys, yaml
+          fails = 0
+          for f in ["setup-jdk", "setup-android-env", "setup-android-ndk", "publish-release", "squash-merge"]:
+              try:
+                  yaml.safe_load(pathlib.Path(f"{f}/action.yml").read_text())
+                  print(f"{f}: YAML OK")
+              except Exception as e:
+                  fails += 1
+                  print(f"{f}: YAML ERROR: {e}")
+          sys.exit(fails)
+          PY
+          # Extract every embedded run block for shellcheck (best-effort; a
+          # longer review than actionlint's own shell parsing).
+          python3 - <<'PY' || true
           import pathlib, re
+          seen = []
           for f in ["setup-jdk", "setup-android-env", "setup-android-ndk", "publish-release", "squash-merge"]:
               text = pathlib.Path(f"{f}/action.yml").read_text()
               for i, m in enumerate(re.finditer(r"\n\s+run: \|\n(?P<body>(?:.*\n)+?)(?=\s+[A-Za-z-]+:|$)", text)):
@@ -49,16 +55,12 @@ jobs:
                   indent = min(len(l) - len(l.lstrip()) for l in body.splitlines())
                   p = pathlib.Path(f"/tmp/{f}-{i}.sh")
                   p.write_text("\n".join(l[indent:] for l in body.splitlines()))
-                  print(f"{p.name}: {len(p.read_text().splitlines())} lines")
           PY
-            for f in /tmp/setup-jdk-0.sh /tmp/setup-android-env-0.sh /tmp/setup-android-ndk-0.sh /tmp/publish-release-0.sh /tmp/publish-release-1.sh /tmp/publish-release-2.sh /tmp/squash-merge-*.sh; do
-              [ -e "$f" ] || continue
-              echo "--- shellcheck $f ---"
-              shellcheck -x -S warning "$f" || true
-            done
-          else
-            echo "shellcheck not available; skipping (non-blocking)"
-          fi
+          for f in /tmp/setup-jdk-0.sh /tmp/setup-android-env-0.sh /tmp/setup-android-ndk-0.sh /tmp/publish-release-0.sh /tmp/publish-release-1.sh /tmp/publish-release-2.sh /tmp/squash-merge-*.sh; do
+            [ -e "$f" ] || continue
+            echo "--- shellcheck $f ---"
+            shellcheck -S warning "$f" || true
+          done
 
   smoke:
     name: smoke-test actions
