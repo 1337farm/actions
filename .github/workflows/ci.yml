@@ -24,7 +24,7 @@ jobs:
           mkdir -p /tmp/actionlint
           curl -fsSL -o /tmp/actionlint/actionlint.tar.gz \
             https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
-          tar -xzf /tmp/actionlint/actionlint.tar.gz -C /tmp/actionlint --strip-components=1
+          tar -xzf /tmp/actionlint/actionlint.tar.gz -C /tmp/actionlint
           /tmp/actionlint/actionlint -color .github/workflows/*.yml
 
       - name: validate action.yml files (YAML parse + shellcheck inline blocks)
