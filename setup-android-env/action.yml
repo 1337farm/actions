@@ -1,16 +1,48 @@
 name: Setup Android SDK env
-description: Point at the runner-preinstalled Android SDK, export SDK env vars, accept licenses. No downloads (JDK/NDK installed separately).
+description: >-
+  Locate the Android SDK, export SDK env vars, and accept licenses. SDK path is
+  configurable and defaults to the runner-preinstalled location. No downloads
+  (JDK/NDK installed separately).
+inputs:
+  sdk-path:
+    description: Path to the Android SDK (defaults to the runner-preinstalled SDK)
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
     - name: Set up Android SDK env
       shell: bash
+      env:
+        SDK_INPUT: ${{ inputs.sdk-path }}
       run: |
-        SDK=/usr/local/lib/android/sdk
-        test -d "$SDK/cmdline-tools" || { echo "ERROR: preinstalled SDK missing at $SDK" >&2; exit 1; }
+        set -euo pipefail
+
+        # Resolve the SDK: explicit input > existing env vars > the GitHub
+        # runner-preinstalled location. Never hardcode a single path.
+        SDK=""
+        if [ -n "$SDK_INPUT" ]; then
+          SDK="$SDK_INPUT"
+        elif [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -d "$ANDROID_SDK_ROOT" ]; then
+          SDK="$ANDROID_SDK_ROOT"
+        elif [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME" ]; then
+          SDK="$ANDROID_HOME"
+        elif [ -d /usr/local/lib/android/sdk ]; then
+          SDK=/usr/local/lib/android/sdk
+        fi
+
+        [ -n "$SDK" ] || { echo "ERROR: Android SDK not found (set sdk-path, ANDROID_SDK_ROOT, or ANDROID_HOME)" >&2; exit 1; }
+        [ -d "$SDK/cmdline-tools" ] || { echo "ERROR: preinstalled SDK missing cmdline-tools at $SDK/cmdline-tools" >&2; exit 1; }
+
         echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
         echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
         echo "$SDK/cmdline-tools/latest/bin:$SDK/platform-tools" >> "$GITHUB_PATH"
         export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
-        yes | sdkmanager --licenses >/dev/null 2>&1 || true
-        sdkmanager --version
+
+        if command -v sdkmanager >/dev/null 2>&1; then
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --version
+        else
+          echo "WARNING: sdkmanager not on PATH; licenses not auto-accepted"
+        fi
+        echo "Android SDK: $SDK"
