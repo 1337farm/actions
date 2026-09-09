@@ -4,13 +4,8 @@ description: >-
   (and C/C++) compiler caching across branches and PRs. Callers opt in per
   build step with RUSTC_WRAPPER=sccache (e.g. as step env on the cargo
   invocation); this action only installs and configures the cache backend.
-inputs:
-  version:
-    description: mozilla-actions/sccache-action tag to use
-    required: false
-    default: v0.0.11
 runs:
   using: composite
   steps:
     - name: Install sccache
-      uses: mozilla-actions/sccache-action@${{ inputs.version }}
+      uses: mozilla-actions/sccache-action@v0.0.11

@@ -9,7 +9,7 @@ Shared composite GitHub Actions for 1337farm Android builds. Pure shell, no thir
 | `setup-jdk` | Install Temurin JDK (`java-version`, default `17`); linux/macOS, x64/aarch64, tool-cache reuse |
 | `publish-release` | Replace a rolling release tag with files (`tag`, `title`, `notes`, `files`); globs + strict failures |
 | `squash-merge` | Squash-merge a PR with preflight + idempotence (`pr-number`, `repo?`) |
-| `setup-sccache` | Install sccache with GHA cache backend (`version?`); consumers set `RUSTC_WRAPPER=sccache` |
+| `setup-sccache` | Install sccache (pinned v0.0.11) with GHA cache backend; consumers set `RUSTC_WRAPPER=sccache` |
 | `cache-cargo` | Cache cargo registry + target dirs (`workspaces?`, `shared-key` pins target + features, `cache-targets?`) |
 | `cache-musl-toolchain` | Restore/download aarch64 musl toolchain, export `TOOLCHAIN_BIN`/`PATH`/`CC_*`/`AR_*` (`cache-key?`, `cache-path?`, `mirrors?`) |
 
