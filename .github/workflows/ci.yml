@@ -34,7 +34,7 @@ jobs:
           python3 - <<'PY'
           import pathlib, sys, yaml
           fails = 0
-          for f in ["setup-jdk", "setup-android-env", "setup-android-ndk", "publish-release", "squash-merge"]:
+          for f in ["setup-jdk", "setup-android-env", "setup-android-ndk", "publish-release", "squash-merge", "setup-sccache", "cache-cargo", "cache-musl-toolchain"]:
               try:
                   yaml.safe_load(pathlib.Path(f"{f}/action.yml").read_text())
                   print(f"{f}: YAML OK")
@@ -48,7 +48,7 @@ jobs:
           python3 - <<'PY' || true
           import pathlib, re
           seen = []
-          for f in ["setup-jdk", "setup-android-env", "setup-android-ndk", "publish-release", "squash-merge"]:
+          for f in ["setup-jdk", "setup-android-env", "setup-android-ndk", "publish-release", "squash-merge", "setup-sccache", "cache-cargo", "cache-musl-toolchain"]:
               text = pathlib.Path(f"{f}/action.yml").read_text()
               for i, m in enumerate(re.finditer(r"\n\s+run: \|\n(?P<body>(?:.*\n)+?)(?=\s+[A-Za-z-]+:|$)", text)):
                   body = m.group("body")
@@ -56,7 +56,7 @@ jobs:
                   p = pathlib.Path(f"/tmp/{f}-{i}.sh")
                   p.write_text("\n".join(l[indent:] for l in body.splitlines()))
           PY
-          for f in /tmp/setup-jdk-0.sh /tmp/setup-android-env-0.sh /tmp/setup-android-ndk-0.sh /tmp/publish-release-0.sh /tmp/publish-release-1.sh /tmp/publish-release-2.sh /tmp/squash-merge-*.sh; do
+          for f in /tmp/setup-jdk-0.sh /tmp/setup-android-env-0.sh /tmp/setup-android-ndk-0.sh /tmp/publish-release-0.sh /tmp/publish-release-1.sh /tmp/publish-release-2.sh /tmp/squash-merge-*.sh /tmp/cache-musl-toolchain-0.sh; do
             [ -e "$f" ] || continue
             echo "--- shellcheck $f ---"
             shellcheck -S warning "$f" || true
@@ -114,6 +114,25 @@ jobs:
           echo "NDK=$ANDROID_NDK_HOME"
           [ -d "$ANDROID_NDK_HOME" ] || { echo "ERROR: NDK dir missing"; exit 1; }
           [ -d "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" ] || { echo "ERROR: NDK toolchain missing"; exit 1; }
+
+      - name: setup-sccache smoke
+        uses: ./setup-sccache
+
+      - name: Verify sccache
+        shell: bash
+        run: sccache --version
+
+      - name: cache-musl-toolchain end-to-end
+        id: musl
+        uses: ./cache-musl-toolchain
+
+      - name: Verify musl toolchain
+        shell: bash
+        run: |
+          test -n "${TOOLCHAIN_BIN:?TOOLCHAIN_BIN must be exported}"
+          test -x "$TOOLCHAIN_BIN/aarch64-linux-musl-gcc"
+          aarch64-linux-musl-gcc --version | head -1
+          test "${{ steps.musl.outputs.toolchain-bin }}" = "$TOOLCHAIN_BIN"
 
       - name: Build fake publish assets
         shell: bash
