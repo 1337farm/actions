@@ -1,0 +1,89 @@
+name: Cache musl cross toolchain
+description: >-
+  Restore a cached aarch64 musl cross toolchain, downloading it on cache
+  miss (multi-mirror fallback) and re-seeding the cache. Exports
+  TOOLCHAIN_BIN, prepends its bin/ to PATH, and exports
+  CC_aarch64_unknown_linux_musl / AR_aarch64_unknown_linux_musl for later
+  steps, so callers just build.
+inputs:
+  cache-key:
+    description: Cache key for the extracted toolchain (bump to refresh it)
+    required: false
+    default: musl-cross-aarch64-v1
+  cache-path:
+    description: Directory holding the extracted toolchain (bin/ underneath)
+    required: false
+    default: ~/musl-cross
+  mirrors:
+    description: Newline-separated tarball URLs tried in order on cache miss
+    required: false
+    default: |
+      https://musl.cc/aarch64-linux-musl-cross.tgz
+      https://github.com/libviprs/libviprs-dep/releases/download/musl-cross-mirror/aarch64-linux-musl-cross.tgz
+      https://github.com/arceos-org/setup-musl/releases/download/prebuilt/aarch64-linux-musl-cross.tgz
+outputs:
+  toolchain-bin:
+    description: Absolute path of the toolchain bin/ directory
+    value: ${{ steps.toolchain.outputs.toolchain-bin }}
+  cache-hit:
+    description: actions/cache hit flag (true when download was skipped)
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - name: Restore toolchain cache
+      id: restore
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.cache-path }}
+        key: ${{ inputs.cache-key }}
+
+    - name: Provide toolchain
+      id: toolchain
+      shell: bash
+      env:
+        INPUT_CACHE_KEY: ${{ inputs.cache-key }}
+        INPUT_CACHE_PATH: ${{ inputs.cache-path }}
+        INPUT_MIRRORS: ${{ inputs.mirrors }}
+        TMP_DIR: ${{ runner.temp }}
+      run: |
+        set -euo pipefail
+        [ -n "$INPUT_CACHE_KEY" ] || { echo "ERROR: cache-key input is empty" >&2; exit 1; }
+        [ -n "$INPUT_CACHE_PATH" ] || { echo "ERROR: cache-path input is empty" >&2; exit 1; }
+        CACHE_DIR="${INPUT_CACHE_PATH/#\~/$HOME}"
+        GCC="$CACHE_DIR/bin/aarch64-linux-musl-gcc"
+
+        TOOLCHAIN_BIN=""
+        if [ -x "$GCC" ]; then
+          echo "Using cached musl toolchain at $CACHE_DIR"
+          TOOLCHAIN_BIN="$CACHE_DIR/bin"
+        else
+          # musl.cc is a single-host mirror that runners sometimes cannot
+          # reach (TCP connect times out); fall back to GitHub-CDN copies.
+          while IFS= read -r URL || [ -n "$URL" ]; do
+            [ -n "$URL" ] || continue
+            if curl -fL --retry 6 --retry-delay 10 --retry-all-errors --connect-timeout 30 \
+                -o "$TMP_DIR/musl.tgz" "$URL"; then
+              tar xzf "$TMP_DIR/musl.tgz" -C "$TMP_DIR"
+              TOOLCHAIN_GCC="$(find "$TMP_DIR" -maxdepth 3 -type f -name aarch64-linux-musl-gcc | head -1)"
+              if [ -n "$TOOLCHAIN_GCC" ]; then
+                TOOLCHAIN_BIN="$(dirname "$TOOLCHAIN_GCC")"
+                break
+              fi
+              rm -rf "$TMP_DIR/musl.tgz" "$TMP_DIR"/aarch64-linux-musl*
+            fi
+          done <<< "$INPUT_MIRRORS"
+          [ -n "$TOOLCHAIN_BIN" ] || { echo "ERROR: could not download any aarch64 musl toolchain" >&2; exit 1; }
+          rm -rf "$CACHE_DIR"
+          cp -r "$(dirname "$TOOLCHAIN_BIN")" "$CACHE_DIR"
+          TOOLCHAIN_BIN="$CACHE_DIR/bin"
+        fi
+
+        {
+          echo "TOOLCHAIN_BIN=$TOOLCHAIN_BIN"
+          echo "CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc"
+          echo "AR_aarch64_unknown_linux_musl=aarch64-linux-musl-ar"
+        } >> "$GITHUB_ENV"
+        echo "$TOOLCHAIN_BIN" >> "$GITHUB_PATH"
+        echo "toolchain-bin=$TOOLCHAIN_BIN" >> "$GITHUB_OUTPUT"
+        "$TOOLCHAIN_BIN/aarch64-linux-musl-gcc" --version | head -1

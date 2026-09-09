@@ -1,0 +1,11 @@
+name: Setup sccache
+description: >-
+  Install sccache with the GitHub Actions cache backend for shared Rust
+  (and C/C++) compiler caching across branches and PRs. Callers opt in per
+  build step with RUSTC_WRAPPER=sccache (e.g. as step env on the cargo
+  invocation); this action only installs and configures the cache backend.
+runs:
+  using: composite
+  steps:
+    - name: Install sccache
+      uses: mozilla-actions/sccache-action@v0.0.11

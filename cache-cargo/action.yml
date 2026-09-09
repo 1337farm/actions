@@ -1,0 +1,29 @@
+name: Cache Cargo build
+description: >-
+  Cache the cargo registry and target directories for incremental Rust
+  builds. The shared-key MUST pin the cross-compilation target and cargo
+  feature set; bump it whenever either changes, otherwise a stale cache
+  silently rebuilds with the wrong flags.
+inputs:
+  workspaces:
+    description: Newline-separated cargo workspace roots (forwarded to rust-cache)
+    required: false
+    default: .
+  shared-key:
+    description: >-
+      Cache key fragment pinning target triple + feature set
+      (e.g. aarch64-unknown-linux-musl_vendored-openssl)
+    required: true
+  cache-targets:
+    description: Whether to cache target directories (forwarded to rust-cache)
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Restore cargo cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: ${{ inputs.workspaces }}
+        shared-key: ${{ inputs.shared-key }}
+        cache-targets: ${{ inputs.cache-targets }}
