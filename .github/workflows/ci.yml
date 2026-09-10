@@ -70,7 +70,6 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: setup-jdk (default 17, cached on re-run)
-        id: jdk
         uses: ./setup-jdk
 
       - name: Verify JDK
