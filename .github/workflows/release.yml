@@ -1,0 +1,84 @@
+name: Release tags
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  release-tags:
+    name: validate workflows + immutable sha tag + move v1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: validate workflows (actionlint if available, else YAML parse)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v actionlint >/dev/null 2>&1; then
+            actionlint -color .github/workflows/*.yml
+          elif [ -x /tmp/actionlint/actionlint ]; then
+            /tmp/actionlint/actionlint -color .github/workflows/*.yml
+          else
+            echo "actionlint not preinstalled; attempting download..."
+            if mkdir -p /tmp/actionlint \
+              && curl -fsSL -o /tmp/actionlint/actionlint.tar.gz \
+                https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+              && tar -xzf /tmp/actionlint/actionlint.tar.gz -C /tmp/actionlint; then
+              /tmp/actionlint/actionlint -color .github/workflows/*.yml
+            else
+              echo "actionlint unavailable; falling back to plain YAML parse check"
+              python3 - <<'PY'
+              import pathlib, sys
+              try:
+                  import yaml
+              except ImportError:
+                  print("pyyaml missing; installing...")
+                  import subprocess
+                  subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "pyyaml"])
+                  import yaml
+              fails = 0
+              for p in sorted(pathlib.Path(".github/workflows").glob("*.yml")):
+                  try:
+                      yaml.safe_load(p.read_text())
+                      print(f"{p}: YAML OK")
+                  except Exception as e:
+                      fails += 1
+                      print(f"{p}: YAML ERROR: {e}")
+              sys.exit(fails)
+              PY
+            fi
+          fi
+
+      - name: create immutable sha tag and move v1 to main HEAD
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          SHORT="$(git rev-parse --short=10 HEAD)"
+          TAG="sha-${SHORT}"
+          CURRENT="$(git rev-parse HEAD)"
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            EXISTING="$(git rev-parse "${TAG}")"
+            if [ "${EXISTING}" != "${CURRENT}" ]; then
+              echo "ERROR: immutable tag ${TAG} already exists at ${EXISTING}, refusing to move"
+              exit 1
+            fi
+            echo "${TAG} already points at HEAD, skipping creation"
+          else
+            git tag "${TAG}"
+            git push origin "${TAG}"
+            echo "created immutable tag ${TAG} at ${CURRENT}"
+          fi
+          git tag -f v1
+          git push -f origin v1
+          echo "moved v1 to ${CURRENT}"
