@@ -22,15 +22,15 @@ inputs:
   enforce-admins:
     description: Enforce protection for administrators
     required: false
-    default: "false"
+    default: "true"
   linear-history:
     description: Require linear commit history
     required: false
-    default: "false"
+    default: "true"
   conversation-resolution:
     description: Require conversation resolution before merging
     required: false
-    default: "false"
+    default: "true"
   no-force-pushes:
     description: Prevent force pushes
     required: false
