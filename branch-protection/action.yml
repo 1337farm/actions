@@ -1,0 +1,93 @@
+name: Apply Branch Protection
+description: >-
+  Apply forge-gatekeeper-style branch protection to any repo via gh api.
+  Runs a standalone shell script using actions/github-script@v7 for the
+  gh authentication context.
+inputs:
+  repo:
+    description: Repository in owner/repo format
+    required: true
+  branch:
+    description: Branch to protect
+    required: false
+    default: main
+  checks:
+    description: Comma-separated status check contexts
+    required: false
+    default: test,aar
+  strict:
+    description: Require status checks to pass before merging
+    required: false
+    default: "false"
+  enforce-admins:
+    description: Enforce protection for administrators
+    required: false
+    default: "false"
+  linear-history:
+    description: Require linear commit history
+    required: false
+    default: "false"
+  conversation-resolution:
+    description: Require conversation resolution before merging
+    required: false
+    default: "false"
+  no-force-pushes:
+    description: Prevent force pushes
+    required: false
+    default: "true"
+  no-deletions:
+    description: Prevent branch deletions
+    required: false
+    default: "true"
+  no-block-creations:
+    description: Allow branch creation
+    required: false
+    default: "true"
+  no-signatures:
+    description: Require signed commits
+    required: false
+    default: "true"
+  no-lock-branch:
+    description: Lock the branch
+    required: false
+    default: "true"
+  no-fork-syncing:
+    description: Prevent fork syncing
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Apply branch protection
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_BRANCH: ${{ inputs.branch }}
+        INPUT_CHECKS: ${{ inputs.checks }}
+        INPUT_STRICT: ${{ inputs.strict }}
+        INPUT_ENFORCE_ADMINS: ${{ inputs.enforce-admins }}
+        INPUT_LINEAR_HISTORY: ${{ inputs.linear-history }}
+        INPUT_CONVERSATION_RESOLUTION: ${{ inputs.conversation-resolution }}
+        INPUT_NO_FORCE_PUSHES: ${{ inputs.no-force-pushes }}
+        INPUT_NO_DELETIONS: ${{ inputs.no-deletions }}
+        INPUT_NO_BLOCK_CREATIONS: ${{ inputs.no-block-creations }}
+        INPUT_NO_SIGNATURES: ${{ inputs.no-signatures }}
+        INPUT_NO_LOCK_BRANCH: ${{ inputs.no-lock-branch }}
+        INPUT_NO_FORK_SYNCING: ${{ inputs.no-fork-syncing }}
+      run: |
+        set -euo pipefail
+        ARGS=(--repo "$INPUT_REPO")
+        [ -n "$INPUT_BRANCH" ] && ARGS+=(--branch "$INPUT_BRANCH")
+        [ -n "$INPUT_CHECKS" ] && ARGS+=(--checks "$INPUT_CHECKS")
+        [ -n "$INPUT_STRICT" ] && ARGS+=(--strict "$INPUT_STRICT")
+        [ "${INPUT_ENFORCE_ADMINS}" = "true" ] && ARGS+=(--enforce-admins)
+        [ "${INPUT_LINEAR_HISTORY}" = "true" ] && ARGS+=(--linear-history)
+        [ "${INPUT_CONVERSATION_RESOLUTION}" = "true" ] && ARGS+=(--conversation-resolution)
+        [ "${INPUT_NO_FORCE_PUSHES}" = "true" ] && ARGS+=(--no-force-pushes)
+        [ "${INPUT_NO_DELETIONS}" = "true" ] && ARGS+=(--no-deletions)
+        [ "${INPUT_NO_BLOCK_CREATIONS}" = "true" ] && ARGS+=(--no-block-creations)
+        [ "${INPUT_NO_SIGNATURES}" = "true" ] && ARGS+=(--no-signatures)
+        [ "${INPUT_NO_LOCK_BRANCH}" = "true" ] && ARGS+=(--no-lock-branch)
+        [ "${INPUT_NO_FORK_SYNCING}" = "true" ] && ARGS+=(--no-fork-syncing)
+        bash scripts/apply-branch-protection.sh "${ARGS[@]}"
