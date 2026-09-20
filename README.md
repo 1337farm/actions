@@ -9,9 +9,10 @@ Shared composite GitHub Actions for 1337farm Android builds. Pure shell, no thir
 | `setup-jdk` | Install Temurin JDK (`java-version`, default `17`); linux/macOS, x64/aarch64, tool-cache reuse |
 | `publish-release` | Replace a rolling release tag with files (`tag`, `title`, `notes`, `files`); globs + strict failures |
 | `squash-merge` | Squash-merge a PR with preflight + idempotence (`pr-number`, `repo?`) |
-| `setup-sccache` | Install sccache (pinned v0.0.11) with GHA cache backend; consumers set `RUSTC_WRAPPER=sccache` |
-| `cache-cargo` | Cache cargo registry + target dirs (`workspaces?`, `shared-key` pins target + features, `cache-targets?`) |
+| `setup-sccache` | Install sccache with the GitHub Actions cache backend for shared Rust |
+| `cache-cargo` | Cache the cargo registry and target directories for incremental Rust builds. The shared-key MUST pin the cross-compilation target and feature set; bump it whenever either changes, otherwise a stale cache |
 | `cache-musl-toolchain` | Restore/download aarch64 musl toolchain, export `TOOLCHAIN_BIN`/`PATH`/`CC_*`/`AR_*` (`cache-key?`, `cache-path?`, `mirrors?`) |
+| `apply-branch-protection` | Apply forge-gatekeeper-style branch protection to any repo via `gh api` PUT to `repos/OWNER/REPO/branches/BRANCH/protection` |
 
 Consume pinned: `1337farm/actions/setup-jdk@v1`. See each action's `action.yml` for inputs.
 

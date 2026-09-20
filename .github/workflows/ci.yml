@@ -34,7 +34,7 @@ jobs:
           python3 - <<'PY'
           import pathlib, sys, yaml
           fails = 0
-          for f in ["setup-jdk", "setup-android-env", "setup-android-ndk", "publish-release", "squash-merge", "setup-sccache", "cache-cargo", "cache-musl-toolchain"]:
+          for f in ["setup-jdk", "setup-android-env", "setup-android-ndk", "publish-release", "squash-merge", "setup-sccache", "cache-cargo", "cache-musl-toolchain", "branch-protection"]:
               try:
                   yaml.safe_load(pathlib.Path(f"{f}/action.yml").read_text())
                   print(f"{f}: YAML OK")
@@ -48,7 +48,7 @@ jobs:
           python3 - <<'PY' || true
           import pathlib, re
           seen = []
-          for f in ["setup-jdk", "setup-android-env", "setup-android-ndk", "publish-release", "squash-merge", "setup-sccache", "cache-cargo", "cache-musl-toolchain"]:
+          for f in ["setup-jdk", "setup-android-env", "setup-android-ndk", "publish-release", "squash-merge", "setup-sccache", "cache-cargo", "cache-musl-toolchain", "branch-protection"]:
               text = pathlib.Path(f"{f}/action.yml").read_text()
               for i, m in enumerate(re.finditer(r"\n\s+run: \|\n(?P<body>(?:.*\n)+?)(?=\s+[A-Za-z-]+:|$)", text)):
                   body = m.group("body")
