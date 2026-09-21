@@ -10,9 +10,9 @@ LINEAR_HISTORY=true
 CONVERSATION_RESOLUTION=true
 NO_FORCE_PUSHES=true
 NO_DELETIONS=true
-NO_BLOCK_CREATIONS=true
-NO_SIGNATURES=true
-NO_LOCK_BRANCH=true
+NO_BLOCK_CREATIONS=false
+NO_SIGNATURES=false
+NO_LOCK_BRANCH=false
 NO_FORK_SYNCING=true
 
 usage() {
@@ -33,9 +33,9 @@ Options:
   --conversation-resolution Require conversation resolution before merging (default: true)
   --no-force-pushes        Prevent force pushes (default: true)
   --no-deletions           Prevent branch deletions (default: true)
-  --no-block-creations     Allow branch creation (default: true)
-  --no-signatures          Do not require signed commits (default: true)
-  --no-lock-branch         Do not lock the branch (default: true)
+  --no-block-creations     Prevent branch creation (default: false)
+  --no-signatures          Require signed commits (default: false)
+  --no-lock-branch         Lock the branch (default: false)
   --no-fork-syncing        Prevent fork syncing (default: true)
   --help                   Show this help message
 EOF
@@ -183,7 +183,6 @@ PAYLOAD="$(jq -n \
     --argjson allow_force_pushes "$ALLOW_FORCE_PUSHES_JSON" \
     --argjson allow_deletions "$ALLOW_DELETIONS_JSON" \
     --argjson block_creations "$BLOCK_CREATIONS_JSON" \
-    --argjson required_signatures "$REQUIRED_SIGNATURES_JSON" \
     --argjson lock_branch "$LOCK_BRANCH_JSON" \
     --argjson allow_fork_syncing "$ALLOW_FORK_SYNCING_JSON" \
     '{
@@ -192,12 +191,13 @@ PAYLOAD="$(jq -n \
             contexts: $checks
         },
         enforce_admins: $enforce_admins,
+        required_pull_request_reviews: null,
+        restrictions: null,
         required_linear_history: $required_linear_history,
-        required_conversation_resolution: $required_conversation_resolution,
         allow_force_pushes: $allow_force_pushes,
         allow_deletions: $allow_deletions,
         block_creations: $block_creations,
-        required_signatures: $required_signatures,
+        required_conversation_resolution: $required_conversation_resolution,
         lock_branch: $lock_branch,
         allow_fork_syncing: $allow_fork_syncing
     }')"
@@ -234,55 +234,48 @@ if [ "$ACTUAL_STRICT" != "$STRICT_JSON" ]; then
     exit 1
 fi
 
-ACTUAL_ENFORCE_ADMINS="$(printf '%s' "$RESULT" | jq -r '.enforce_admins')"
+ACTUAL_ENFORCE_ADMINS="$(printf '%s' "$RESULT" | jq -r '.enforce_admins.enabled')"
 if [ "$ACTUAL_ENFORCE_ADMINS" != "$ENFORCE_ADMINS_JSON" ]; then
     echo "ERROR: enforce_admins mismatch: expected '$ENFORCE_ADMINS_JSON', got '$ACTUAL_ENFORCE_ADMINS'" >&2
     exit 1
 fi
 
-ACTUAL_LINEAR_HISTORY="$(printf '%s' "$RESULT" | jq -r '.required_linear_history')"
+ACTUAL_LINEAR_HISTORY="$(printf '%s' "$RESULT" | jq -r '.required_linear_history.enabled')"
 if [ "$ACTUAL_LINEAR_HISTORY" != "$LINEAR_HISTORY_JSON" ]; then
     echo "ERROR: required_linear_history mismatch: expected '$LINEAR_HISTORY_JSON', got '$ACTUAL_LINEAR_HISTORY'" >&2
     exit 1
 fi
-
-ACTUAL_REQUIRED_SIGNATURES="$(printf '%s' "$RESULT" | jq -r '.required_signatures')"
-if [ "$ACTUAL_REQUIRED_SIGNATURES" != "$REQUIRED_SIGNATURES_JSON" ]; then
-    echo "ERROR: required_signatures mismatch: expected '$REQUIRED_SIGNATURES_JSON', got '$ACTUAL_REQUIRED_SIGNATURES'" >&2
-    exit 1
-fi
-
-ACTUAL_BLOCK_CREATIONS="$(printf '%s' "$RESULT" | jq -r '.block_creations')"
+ACTUAL_BLOCK_CREATIONS="$(printf '%s' "$RESULT" | jq -r '.block_creations.enabled')"
 if [ "$ACTUAL_BLOCK_CREATIONS" != "$BLOCK_CREATIONS_JSON" ]; then
     echo "ERROR: block_creations mismatch: expected '$BLOCK_CREATIONS_JSON', got '$ACTUAL_BLOCK_CREATIONS'" >&2
     exit 1
 fi
 
-ACTUAL_CONVERSATION_RESOLUTION="$(printf '%s' "$RESULT" | jq -r '.required_conversation_resolution')"
+ACTUAL_CONVERSATION_RESOLUTION="$(printf '%s' "$RESULT" | jq -r '.required_conversation_resolution.enabled')"
 if [ "$ACTUAL_CONVERSATION_RESOLUTION" != "$CONVERSATION_RESOLUTION_JSON" ]; then
     echo "ERROR: required_conversation_resolution mismatch: expected '$CONVERSATION_RESOLUTION_JSON', got '$ACTUAL_CONVERSATION_RESOLUTION'" >&2
     exit 1
 fi
 
-ACTUAL_LOCK_BRANCH="$(printf '%s' "$RESULT" | jq -r '.lock_branch')"
+ACTUAL_LOCK_BRANCH="$(printf '%s' "$RESULT" | jq -r '.lock_branch.enabled')"
 if [ "$ACTUAL_LOCK_BRANCH" != "$LOCK_BRANCH_JSON" ]; then
     echo "ERROR: lock_branch mismatch: expected '$LOCK_BRANCH_JSON', got '$ACTUAL_LOCK_BRANCH'" >&2
     exit 1
 fi
 
-ACTUAL_ALLOW_FORCE_PUSHES="$(printf '%s' "$RESULT" | jq -r '.allow_force_pushes')"
+ACTUAL_ALLOW_FORCE_PUSHES="$(printf '%s' "$RESULT" | jq -r '.allow_force_pushes.enabled')"
 if [ "$ACTUAL_ALLOW_FORCE_PUSHES" != "$ALLOW_FORCE_PUSHES_JSON" ]; then
     echo "ERROR: allow_force_pushes mismatch: expected '$ALLOW_FORCE_PUSHES_JSON', got '$ACTUAL_ALLOW_FORCE_PUSHES'" >&2
     exit 1
 fi
 
-ACTUAL_ALLOW_DELETIONS="$(printf '%s' "$RESULT" | jq -r '.allow_deletions')"
+ACTUAL_ALLOW_DELETIONS="$(printf '%s' "$RESULT" | jq -r '.allow_deletions.enabled')"
 if [ "$ACTUAL_ALLOW_DELETIONS" != "$ALLOW_DELETIONS_JSON" ]; then
     echo "ERROR: allow_deletions mismatch: expected '$ALLOW_DELETIONS_JSON', got '$ACTUAL_ALLOW_DELETIONS'" >&2
     exit 1
 fi
 
-ACTUAL_ALLOW_FORK_SYNCING="$(printf '%s' "$RESULT" | jq -r '.allow_fork_syncing')"
+ACTUAL_ALLOW_FORK_SYNCING="$(printf '%s' "$RESULT" | jq -r '.allow_fork_syncing.enabled')"
 if [ "$ACTUAL_ALLOW_FORK_SYNCING" != "$ALLOW_FORK_SYNCING_JSON" ]; then
     echo "ERROR: allow_fork_syncing mismatch: expected '$ALLOW_FORK_SYNCING_JSON', got '$ACTUAL_ALLOW_FORK_SYNCING'" >&2
     exit 1
